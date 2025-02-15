@@ -11,10 +11,18 @@ import os
 import uuid
 from supabase import create_client
 import uvicorn
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Initialize Supabase client
-supabase_url = "YOUR_SUPABASE_URL"
-supabase_key = "YOUR_SUPABASE_KEY"
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_KEY")
+
+if not supabase_url or not supabase_key:
+    raise ValueError("Missing required environment variables: SUPABASE_URL and SUPABASE_KEY")
+
 supabase = create_client(supabase_url, supabase_key)
 
 class TranscriptSegment(BaseModel):
@@ -89,13 +97,14 @@ async def process_video(video_url: str, video_id: str):
                     # Get public URL
                     storage_url = supabase.storage.from_("youtube_frames").get_public_url(storage_path)
                     
-                    segments_data.append({
-                        "item": i,
-                        "start": int(timestamp * 1000),
-                        "storage_url": storage_url
-                    })
-                    
-                    os.unlink(frame_file.name)
+                segments_data.append({
+                    "item": i,
+                    "start": int(timestamp * 1000),
+                    "storage_url": storage_url,
+                    "text": segment.text
+                })
+                
+                os.unlink(frame_file.name)
         
         capture.release()
 
@@ -121,6 +130,7 @@ async def process_video(video_url: str, video_id: str):
     for segment in segments_data:
         segment["id"] = str(uuid.uuid4())
         segment["youtube_id"] = youtube_id
+        segment["storage_url"] = segment.pop("storage_url")
     
     segments_response = supabase.table("segments").upsert(segments_data).execute()
     
